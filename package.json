@@ -1,0 +1,48 @@
+{
+  "name": "rule-30",
+  "version": "1.0.0",
+  "description": "",
+  "keywords": [],
+  "author": {
+    "name": "Beeno Tung",
+    "email": "aabbcc1241@yahoo.com.hk",
+    "url": "https://beeno-tung.surge.sh"
+  },
+  "license": "BSD-2-Clause",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "test": "npm run rawtest",
+    "clean": "rimraf node_modules/@beenotung/tslib/index.* dist",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "postformat": "tslint -p . --fix",
+    "prebuild": "npm run clean",
+    "build": "tsc",
+    "prerelease": "rimraf dist && parcel build src/index.html",
+    "release": "surge dist rule-30.surge.sh",
+    "pretest": "npm run format && npm run build",
+    "rawtest": "ts-node test/index.ts",
+    "prepublishOnly": "npm run rawtest && npm run build"
+  },
+  "husky": {
+    "hook": {
+      "pre-commit": "npm run format"
+    }
+  },
+  "directories": {
+    "test": "test"
+  },
+  "dependencies": {
+    "@beenotung/tslib": "^14.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^8.10.48",
+    "husky": "^2.2.0",
+    "prettier": "^1.17.0",
+    "rimraf": "^2.6.3",
+    "ts-node": "^8.1.0",
+    "tslint": "^5.16.0",
+    "tslint-eslint-rules": "^5.4.0",
+    "typescript": "^3.4.5"
+  }
+}
