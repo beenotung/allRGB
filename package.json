@@ -1,0 +1,52 @@
+{
+  "name": "allrgb",
+  "version": "1.0.0",
+  "description": "screensaver showing allrgb pattern",
+  "keywords": [],
+  "author": "Beeno Tung <aabbcc1241@yahoo.com.hk> (https://beeno-tung.surge.sh)",
+  "license": "BSD-2-Clause",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "test": "npm run rawtest",
+    "clean": "rimraf node_modules/@beenotung/tslib/index.* dist",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "postformat": "tslint -p . --fix",
+    "prebuild": "npm run clean",
+    "build": "tsc",
+    "start": "parcel serve src/index.html",
+    "prerelease": "rimraf dist && parcel build src/index.html",
+    "release": "surge dist allrgb.surge.sh",
+    "pretest": "npm run format && npm run build",
+    "rawtest": "ts-node test/index.ts",
+    "prepublishOnly": "npm run rawtest && npm run build"
+  },
+  "husky": {
+    "hook": {
+      "pre-commit": "npm run format"
+    }
+  },
+  "directories": {
+    "test": "test"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^8.10.48",
+    "husky": "^2.2.0",
+    "parcel": "^1.12.3",
+    "prettier": "^1.17.0",
+    "rimraf": "^2.6.3",
+    "ts-node": "^8.1.0",
+    "tslint": "^5.16.0",
+    "tslint-eslint-rules": "^5.4.0",
+    "typescript": "^3.5.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/beenotung/allrgb.git"
+  },
+  "bugs": {
+    "url": "https://github.com/beenotung/allrgb/issues"
+  },
+  "homepage": "https://github.com/beenotung/allrgb#readme"
+}
