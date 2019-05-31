@@ -1,6 +1,6 @@
-# rule-30
-screensaver showing rule30 pattern
+# allrgb
+screensaver showing allrgb pattern
 
 (Press F11 to enter fullscreen mode)
 
-demo site: https://rule-30.surge.sh
+demo site: https://allrgb.surge.sh
