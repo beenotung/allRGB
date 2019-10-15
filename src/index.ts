@@ -35,7 +35,7 @@ const A = 3;
 type rgb = [number, number, number];
 type xy = [number, number];
 
-const { round } = Math;
+const {round} = Math;
 const halfH = round(h / 2);
 const halfW = round(w / 2);
 /**
@@ -45,13 +45,26 @@ let xy_rgb: rgb[][];
 /**
  * r -> g -> b -> xy
  * */
-let rgb_xy: [number, number][][][];
-let spaces: xy[];
+let rgb_xy: xy[][][];
+/**
+ * x -> y -> rgb
+ * opposite to xy_rgb, that store occupied cells, this store unoccupied cells
+ * */
+let spaces: rgb[][];
 
 function setPixel(x: number, y: number, color: rgb) {
   let [r, g, b] = color;
-  xy_rgb[x][y] = color;
+  if (xy_rgb[x]) {
+    xy_rgb[x][y] = color;
+  } else {
+    let ys = xy_rgb[x] = [];
+    ys[y] = color
+  }
   rgb_xy[r][g][b] = [x, y];
+  if (spaces[x]) {
+    delete spaces[x][y];
+  }
+  // find nearby spaces
   for (let xy of [
     [x, y + 1],
     [x, y - 1],
@@ -59,8 +72,17 @@ function setPixel(x: number, y: number, color: rgb) {
     [x - 1, y],
   ]) {
     let [x, y] = xy;
-    if (!xy_rgb[x][y]) {
-      spaces.push([x, y]);
+    if (x < 0 || x > w || y < 0 || y > h) {
+      continue
+    }
+    if (xy_rgb[x] && xy_rgb[x][y]) {
+      continue
+    }
+    if (!spaces[x]) {
+      let ys = spaces[x] = [];
+      ys[y] = [color]
+    } else {
+      spaces[x][y] = color
     }
   }
   const offset = (x + y * w) * 4;
@@ -86,58 +108,59 @@ function genValue(n: number): number {
   return Math.round(Math.random() * n);
 }
 
-function square(x: number): number {
-  return x * x;
+function rgbDiff(x: rgb, y: rgb): number {
+  let r = x[0] - y[0];
+  let g = x[1] - y[1];
+  let b = x[2] - y[2];
+  return r * r + g * g + b * b;
 }
 
-function rgbDiff(x: rgb, y: rgb): number {
-  return square(x[R] - y[R]) +
-    square(x[G] - y[G]) +
-    square(x[B] - y[B]);
-}
+let lastR = genValue(255);
+let lastG = genValue(255);
+let lastB = genValue(255);
+
+let colorDiff = 16;
+let colorDiff2 = colorDiff * 2;
 
 function nextColor(): rgb {
-  return [
-    genValue(255),
-    genValue(255),
-    genValue(255),
-  ];
-}
-
-function genNearBy(x: number, y: number): xy[] {
-  return [
-    [x, y + 1],
-    [x, y - 1],
-    [x + 1, y],
-    [x - 1, y],
-  ];
+  for (; ;) {
+    let r = lastR + genValue(colorDiff2) - colorDiff;
+    let g = lastG + genValue(colorDiff2) - colorDiff;
+    let b = lastB + genValue(colorDiff2) - colorDiff;
+    r = (r + 256) % 256;
+    g = (g + 256) % 256;
+    b = (b + 256) % 256;
+    if (!rgb_xy[r][g][b]) {
+      lastR = r;
+      lastG = g;
+      lastB = b;
+      return [r, g, b]
+    }
+  }
 }
 
 function update() {
   for (let i = 0; i < 64; i++) {
-    let xyIdx = genValue(spaces.length - 1);
-    let [space_xy] = spaces.splice(xyIdx, 1);
-    let [space_x, space_y] = space_xy;
+    let rgb = nextColor();
     let minD = Number.MAX_SAFE_INTEGER;
-    let minRGB: rgb;
-    for (let [x, y] of genNearBy(space_x, space_y)) {
-      let c = xy_rgb[x][y];
-      if (!c) {
-        continue;
-      }
-      for (let j = 0; j < 1024; j++) {
-        let rgb = nextColor();
-        let d = rgbDiff(c, rgb);
-        if (d < minD) {
-          minD = d;
-          minRGB = rgb;
+    let minSpace: xy;
+    spaces.forEach((ys, x) =>
+      ys.forEach((c, y) => {
+          let d = rgbDiff(c, rgb);
+          if (d == minD && Math.random() < 0.5) {
+            minSpace = [x, y]
+          } else if (d < minD) {
+            minD = d;
+            minSpace = [x, y]
+          }
         }
-      }
+      )
+    );
+    if (!minSpace) {
+      continue
     }
-    if (!minRGB) {
-      continue;
-    }
-    setPixel(space_x, space_y, minRGB);
+    let [x, y] = minSpace
+    setPixel(x, y, rgb);
   }
   render();
 }
@@ -181,7 +204,7 @@ function stopNext() {
   isStopNext = true;
 }
 
-Object.assign(window, { start, resume, stop, stopNext });
+Object.assign(window, {start, resume, stop, stopNext});
 
 canvas.onclick = () => {
   if (isStop) {
