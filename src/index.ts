@@ -35,7 +35,7 @@ const A = 3;
 type rgb = [number, number, number];
 type xy = [number, number];
 
-const {round} = Math;
+const { round } = Math;
 const halfH = round(h / 2);
 const halfW = round(w / 2);
 /**
@@ -53,36 +53,31 @@ let rgb_xy: xy[][][];
 let spaces: rgb[][];
 
 function setPixel(x: number, y: number, color: rgb) {
-  let [r, g, b] = color;
+  const [r, g, b] = color;
   if (xy_rgb[x]) {
     xy_rgb[x][y] = color;
   } else {
-    let ys = xy_rgb[x] = [];
-    ys[y] = color
+    const ys = (xy_rgb[x] = []);
+    ys[y] = color;
   }
   rgb_xy[r][g][b] = [x, y];
   if (spaces[x]) {
     delete spaces[x][y];
   }
   // find nearby spaces
-  for (let xy of [
-    [x, y + 1],
-    [x, y - 1],
-    [x + 1, y],
-    [x - 1, y],
-  ]) {
-    let [x, y] = xy;
+  for (const xy of [[x, y + 1], [x, y - 1], [x + 1, y], [x - 1, y]]) {
+    const [x, y] = xy;
     if (x < 0 || x > w || y < 0 || y > h) {
-      continue
+      continue;
     }
     if (xy_rgb[x] && xy_rgb[x][y]) {
-      continue
+      continue;
     }
     if (!spaces[x]) {
-      let ys = spaces[x] = [];
-      ys[y] = [color]
+      const ys = (spaces[x] = []);
+      ys[y] = [color];
     } else {
-      spaces[x][y] = color
+      spaces[x][y] = color;
     }
   }
   const offset = (x + y * w) * 4;
@@ -109,9 +104,9 @@ function genValue(n: number): number {
 }
 
 function rgbDiff(x: rgb, y: rgb): number {
-  let r = x[0] - y[0];
-  let g = x[1] - y[1];
-  let b = x[2] - y[2];
+  const r = x[0] - y[0];
+  const g = x[1] - y[1];
+  const b = x[2] - y[2];
   return r * r + g * g + b * b;
 }
 
@@ -123,7 +118,7 @@ let colorDiff = 16;
 let colorDiff2 = colorDiff * 2;
 
 function nextColor(): rgb {
-  for (; ;) {
+  for (;;) {
     let r = lastR + genValue(colorDiff2) - colorDiff;
     let g = lastG + genValue(colorDiff2) - colorDiff;
     let b = lastB + genValue(colorDiff2) - colorDiff;
@@ -134,32 +129,31 @@ function nextColor(): rgb {
       lastR = r;
       lastG = g;
       lastB = b;
-      return [r, g, b]
+      return [r, g, b];
     }
   }
 }
 
 function update() {
   for (let i = 0; i < 64; i++) {
-    let rgb = nextColor();
+    const rgb = nextColor();
     let minD = Number.MAX_SAFE_INTEGER;
     let minSpace: xy;
     spaces.forEach((ys, x) =>
       ys.forEach((c, y) => {
-          let d = rgbDiff(c, rgb);
-          if (d == minD && Math.random() < 0.5) {
-            minSpace = [x, y]
-          } else if (d < minD) {
-            minD = d;
-            minSpace = [x, y]
-          }
+        const d = rgbDiff(c, rgb);
+        if (d === minD && Math.random() < 0.5) {
+          minSpace = [x, y];
+        } else if (d < minD) {
+          minD = d;
+          minSpace = [x, y];
         }
-      )
+      }),
     );
     if (!minSpace) {
-      continue
+      continue;
     }
-    let [x, y] = minSpace
+    const [x, y] = minSpace;
     setPixel(x, y, rgb);
   }
   render();
@@ -186,7 +180,7 @@ function start() {
       rgb_xy[r][g] = new Array(256);
     }
   }
-  let color = nextColor();
+  const color = nextColor();
   clear();
   setPixel(halfW, halfH, color);
   isStop = false;
@@ -204,7 +198,7 @@ function stopNext() {
   isStopNext = true;
 }
 
-Object.assign(window, {start, resume, stop, stopNext});
+Object.assign(window, { start, resume, stop, stopNext });
 
 canvas.onclick = () => {
   if (isStop) {
