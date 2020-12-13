@@ -93,7 +93,9 @@ let domStop = window.stop;
 
 function stop() {
   isStop = true;
-  domStop();
+  if (stop !== domStop) {
+    domStop();
+  }
 }
 
 /**
