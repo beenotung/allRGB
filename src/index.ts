@@ -1,213 +1,160 @@
-document.title = 'allrgb';
+const R = 0
+const G = 1
+const B = 2
+const A = 3
+const FULL = 255
+const PIXEL = 8
+const targetFPS = 3
+const targetInterval = 1000 / targetFPS
+const { random, floor, min } = Math
+const { MAX_SAFE_INTEGER } = Number
 
-const style: HTMLStyleElement = document.createElement('style');
-style.textContent = `
-body {
-  padding: 0;
-  margin: 0;
-  overflow: hidden;
-}
-`;
-document.body.appendChild(style);
-
-const canvas: HTMLCanvasElement = document.createElement('canvas');
-document.body.appendChild(canvas);
-const w = (canvas.width = 400 * 0 || screen.availWidth);
-const h = (canvas.height = 400 * 0 || screen.availHeight);
-const context = canvas.getContext('2d');
-const imageData = context.createImageData(w, h);
-
-function render() {
-  context.putImageData(imageData, 0, 0);
+function toIndex(x: number, y: number, W: number) {
+  return (y * W + x) * 4
 }
 
-function clear() {
-  for (let i = 0; i < imageData.data.length; i++) {
-    imageData.data[i] = i % 4 === 3 ? 255 : 0;
-  }
+function fromIndex(offset: offset, W: number) {
+  let i = offset / 4
+  let x = i % W
+  let y = (i - x) / W
+  return { x, y }
 }
 
-const R = 0;
-const G = 1;
-const B = 2;
-const A = 3;
-
-type rgb = [number, number, number];
-type xy = [number, number];
-
-const { round } = Math;
-const halfH = round(h / 2);
-const halfW = round(w / 2);
-/**
- * x -> y -> rgb
- * */
-let xy_rgb: rgb[][];
-/**
- * r -> g -> b -> xy
- * */
-let rgb_xy: xy[][][];
-/**
- * x -> y -> rgb
- * opposite to xy_rgb, that store occupied cells, this store unoccupied cells
- * */
-let spaces: rgb[][];
-
-function setPixel(x: number, y: number, color: rgb) {
-  const [r, g, b] = color;
-  if (xy_rgb[x]) {
-    xy_rgb[x][y] = color;
-  } else {
-    const ys = (xy_rgb[x] = []);
-    ys[y] = color;
-  }
-  rgb_xy[r][g][b] = [x, y];
-  if (spaces[x]) {
-    delete spaces[x][y];
-  }
-  // find nearby spaces
-  for (const xy of [[x, y + 1], [x, y - 1], [x + 1, y], [x - 1, y]]) {
-    const [x, y] = xy;
-    if (x < 0 || x > w || y < 0 || y > h) {
-      continue;
-    }
-    if (xy_rgb[x] && xy_rgb[x][y]) {
-      continue;
-    }
-    if (!spaces[x]) {
-      const ys = (spaces[x] = []);
-      ys[y] = [color];
-    } else {
-      spaces[x][y] = color;
+const canvas = document.querySelector('canvas#paint') as HTMLCanvasElement
+const context = canvas.getContext('2d')
+let W: number = 32
+let H: number = 32
+let image = context.createImageData(W, H)
+function resize() {
+  W = floor(window.innerWidth / PIXEL)
+  H = floor(window.innerHeight / PIXEL)
+  canvas.width = W
+  canvas.height = H
+  const newImage = context.createImageData(W, H)
+  for (let y = 0; y < H; y++) {
+    const oldY = floor((y / H) * image.height)
+    for (let x = 0; x < W; x++) {
+      const oldX = floor((x / W) * image.width)
+      const newI = toIndex(x, y, W)
+      const oldI = toIndex(oldX, oldY, image.width)
+      newImage.data[newI + G] = image.data[oldI + G]
+      newImage.data[newI + B] = image.data[oldI + B]
+      newImage.data[newI + A] = image.data[oldI + A]
     }
   }
-  const offset = (x + y * w) * 4;
-  imageData.data[offset + R] = r;
-  imageData.data[offset + G] = g;
-  imageData.data[offset + B] = b;
-  // imageData.data[offset + A] = 255;
+  image = newImage
 }
+window.addEventListener('resize', resize)
+resize()
 
-let isStop = true;
-let isStopNext = false;
-let domStop = window.stop;
+type offset = number
+type Edge = offset
+const edges: Edge[] = []
+const usedColors = new Array<1>(256 * 256 * 256)
 
-function stop() {
-  isStop = true;
-  if (stop !== domStop) {
-    domStop();
-  }
-}
-
-/**
- * @return 0..n
- * */
-function genValue(n: number): number {
-  return Math.round(Math.random() * n);
-}
-
-function rgbDiff(x: rgb, y: rgb): number {
-  const r = x[0] - y[0];
-  const g = x[1] - y[1];
-  const b = x[2] - y[2];
-  return r * r + g * g + b * b;
-}
-
-let lastR = genValue(255);
-let lastG = genValue(255);
-let lastB = genValue(255);
-
-let colorDiff = 16;
-let colorDiff2 = colorDiff * 2;
-
-function nextColor(): rgb {
+function nextColor() {
   for (;;) {
-    let r = lastR + genValue(colorDiff2) - colorDiff;
-    let g = lastG + genValue(colorDiff2) - colorDiff;
-    let b = lastB + genValue(colorDiff2) - colorDiff;
-    r = (r + 256) % 256;
-    g = (g + 256) % 256;
-    b = (b + 256) % 256;
-    if (!rgb_xy[r][g][b]) {
-      lastR = r;
-      lastG = g;
-      lastB = b;
-      return [r, g, b];
-    }
+    const r = floor(random() * 256)
+    const g = floor(random() * 256)
+    const b = floor(random() * 256)
+    const code = (((r << 8) | g) << 8) | b
+    if (usedColors[code]) continue
+    usedColors[code] = 1
+    return { r, g, b }
   }
 }
 
-function update() {
-  for (let i = 0; i < 64; i++) {
-    const rgb = nextColor();
-    let minD = Number.MAX_SAFE_INTEGER;
-    let minSpace: xy;
-    spaces.forEach((ys, x) =>
-      ys.forEach((c, y) => {
-        const d = rgbDiff(c, rgb);
-        if (d === minD && Math.random() < 0.5) {
-          minSpace = [x, y];
-        } else if (d < minD) {
-          minD = d;
-          minSpace = [x, y];
+function place(
+  r: number,
+  g: number,
+  b: number,
+  x: number,
+  y: number,
+  offset: number,
+) {
+  for (;;) {
+    image.data[offset + R] = r
+    image.data[offset + G] = g
+    image.data[offset + B] = b
+    image.data[offset + A] = FULL
+    for (const dy of [-1, 0, 1]) {
+      const edgeY = y + dy
+      for (const dx of [-1, 0, 1]) {
+        const edgeX = x + dx
+        const edgeOffset = toIndex(edgeX, edgeY, W)
+        if (image.data[edgeOffset + A] !== FULL) {
+          edges.push(edgeOffset)
         }
-      }),
-    );
-    if (!minSpace) {
-      continue;
+      }
     }
-    const [x, y] = minSpace;
-    setPixel(x, y, rgb);
+    return
   }
-  render();
 }
-
-function loop() {
-  if (isStop) {
-    return;
-  }
-  update();
-  requestAnimationFrame(loop);
+function init() {
+  const { r, g, b } = nextColor()
+  const x = floor(W / 2)
+  const y = floor(H / 2)
+  const offset = toIndex(x, y, W)
+  place(r, g, b, x, y, offset)
 }
+init()
 
-function start() {
-  spaces = [];
-  xy_rgb = new Array(w);
-  for (let x = 0; x < w; x++) {
-    xy_rgb[x] = new Array(h);
-  }
-  rgb_xy = new Array(256);
-  for (let r = 0; r < 256; r++) {
-    rgb_xy[r] = new Array(256);
-    for (let g = 0; g < 256; g++) {
-      rgb_xy[r][g] = new Array(256);
+function iterate() {
+  const { r, g, b } = nextColor()
+  let minEdgeD2 = MAX_SAFE_INTEGER
+  let minOffset = 0
+  let minX = 0
+  let minY = 0
+  let minEdgeIndex = 0
+  edges.forEach((offset, edgeIndex) => {
+    const { x, y } = fromIndex(offset, W)
+    for (const dy of [-1, 0, 1]) {
+      const edgeY = y + dy
+      for (const dx of [-1, 0, 1]) {
+        if (dy === 0 && dx === 0) continue
+        const edgeX = x + dx
+        const edgeOffset = toIndex(edgeX, edgeY, W)
+        if (image.data[edgeOffset + A] === FULL) {
+          const dr = image.data[edgeOffset + R] - r
+          const dg = image.data[edgeOffset + G] - g
+          const db = image.data[edgeOffset + B] - b
+          const d2 = dr * dr + dg * dg + db * db
+          if (d2 < minEdgeD2) {
+            minEdgeD2 = d2
+            minOffset = offset
+            minX = x
+            minY = y
+            minEdgeIndex = edgeIndex
+          }
+        }
+      }
     }
+  })
+  if (minEdgeD2 != MAX_SAFE_INTEGER) {
+    edges.splice(minEdgeIndex, 1)
+    place(r, g, b, minX, minY, minOffset)
   }
-  const color = nextColor();
-  clear();
-  setPixel(halfW, halfH, color);
-  isStop = false;
-  isStopNext = false;
-  loop();
 }
 
-function resume() {
-  isStop = false;
-  isStopNext = false;
-  loop();
-}
-
-function stopNext() {
-  isStopNext = true;
-}
-
-Object.assign(window, { start, resume, stop, stopNext });
-
-canvas.onclick = () => {
-  if (isStop) {
-    resume();
-  } else {
-    stop();
+let lastTime = Date.now()
+let batchSize = 1000
+function draw() {
+  if (edges.length === 0) {
+    console.log('no edges')
+    return
   }
-};
-
-start();
+  let now = Date.now()
+  for (let i = 0; i < batchSize; i++) {
+    iterate()
+  }
+  let actualInterval = now - lastTime
+  if (actualInterval > targetInterval) {
+    batchSize *= 0.99
+  } else if (actualInterval < targetInterval) {
+    batchSize /= 0.99
+  }
+  lastTime = now
+  context.putImageData(image, 0, 0)
+  requestAnimationFrame(draw)
+}
+requestAnimationFrame(draw)
