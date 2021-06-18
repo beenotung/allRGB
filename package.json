@@ -9,18 +9,16 @@
   "types": "dist/index.d.ts",
   "private": true,
   "scripts": {
-    "test": "npm run rawtest",
-    "clean": "rimraf node_modules/@beenotung/tslib/index.* dist",
-    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
-    "postformat": "tslint -p . --fix",
-    "prebuild": "npm run clean",
-    "build": "tsc",
-    "start": "parcel serve src/index.html",
-    "prerelease": "rimraf dist && parcel build src/index.html",
-    "release": "surge dist allrgb.surge.sh",
-    "pretest": "npm run format && npm run build",
-    "rawtest": "ts-node test/index.ts",
-    "prepublishOnly": "npm run rawtest && npm run build"
+    "clean": "rimraf node_modules/@beenotung/tslib/index.* build",
+    "format": "run-s prettier tslint",
+    "prettier": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "tslint": "tslint -p . --fix",
+    "build": "run-s clean build:snowpack",
+    "build:snowpack": "snowpack build",
+    "start": "snowpack dev",
+    "release": "run-s build surge",
+    "surge": "surge dist allrgb.surge.sh",
+    "test": "run-s format build"
   },
   "husky": {
     "hook": {
@@ -30,13 +28,13 @@
   "directories": {
     "test": "test"
   },
-  "dependencies": {},
   "devDependencies": {
     "@types/node": "^8.10.48",
     "husky": "^2.2.0",
-    "parcel": "^1.12.3",
+    "npm-run-all": "^4.1.5",
     "prettier": "^1.17.0",
     "rimraf": "^2.6.3",
+    "snowpack": "^3.5.9",
     "ts-node": "^8.1.0",
     "tslint": "^5.16.0",
     "tslint-eslint-rules": "^5.4.0",
