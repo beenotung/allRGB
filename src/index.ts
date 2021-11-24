@@ -35,57 +35,22 @@ const A = 3;
 type rgb = [number, number, number];
 type xy = [number, number];
 
-const { round } = Math;
+const { round, floor, random, min } = Math;
 const halfH = round(h / 2);
 const halfW = round(w / 2);
-/**
- * x -> y -> rgb
- * */
-let xy_rgb: rgb[][];
-/**
- * r -> g -> b -> xy
- * */
-let rgb_xy: xy[][][];
-/**
- * x -> y -> rgb
- * opposite to xy_rgb, that store occupied cells, this store unoccupied cells
- * */
-let spaces: rgb[][];
 
-function setPixel(x: number, y: number, color: rgb) {
-  const [r, g, b] = color;
-  if (xy_rgb[x]) {
-    xy_rgb[x][y] = color;
-  } else {
-    const ys = (xy_rgb[x] = []);
-    ys[y] = color;
-  }
-  rgb_xy[r][g][b] = [x, y];
-  if (spaces[x]) {
-    delete spaces[x][y];
-  }
-  // find nearby spaces
-  for (const xy of [[x, y + 1], [x, y - 1], [x + 1, y], [x - 1, y]]) {
-    const [x, y] = xy;
-    if (x < 0 || x > w || y < 0 || y > h) {
-      continue;
-    }
-    if (xy_rgb[x] && xy_rgb[x][y]) {
-      continue;
-    }
-    if (!spaces[x]) {
-      const ys = (spaces[x] = []);
-      ys[y] = [color];
-    } else {
-      spaces[x][y] = color;
-    }
-  }
-  const offset = (x + y * w) * 4;
-  imageData.data[offset + R] = r;
-  imageData.data[offset + G] = g;
-  imageData.data[offset + B] = b;
-  // imageData.data[offset + A] = 255;
+interface Cell {
+  offset: number;
+  color?: rgb;
+  peers: { d: number; cell: Cell }[];
 }
+
+let all_cells: Cell[] = [];
+let edge_cells: Cell[] = [];
+let all_colors: rgb[] = [];
+let used_colors: number[] = [];
+let color_i = 0;
+let batch = 64;
 
 let isStop = true;
 let isStopNext = false;
@@ -95,6 +60,8 @@ function stop() {
   isStop = true;
   domStop();
 }
+
+let win = window as any;
 
 /**
  * @return 0..n
@@ -118,73 +85,163 @@ let colorDiff = 16;
 let colorDiff2 = colorDiff * 2;
 
 function nextColor(): rgb {
-  for (;;) {
-    let r = lastR + genValue(colorDiff2) - colorDiff;
-    let g = lastG + genValue(colorDiff2) - colorDiff;
-    let b = lastB + genValue(colorDiff2) - colorDiff;
-    r = (r + 256) % 256;
-    g = (g + 256) % 256;
-    b = (b + 256) % 256;
-    if (!rgb_xy[r][g][b]) {
-      lastR = r;
-      lastG = g;
-      lastB = b;
-      return [r, g, b];
-    }
-  }
+  const color = all_colors[color_i];
+  color_i++;
+  return color;
 }
 
-function update() {
-  for (let i = 0; i < 64; i++) {
-    const rgb = nextColor();
-    let minD = Number.MAX_SAFE_INTEGER;
-    let minSpace: xy;
-    spaces.forEach((ys, x) =>
-      ys.forEach((c, y) => {
-        const d = rgbDiff(c, rgb);
-        if (d === minD && Math.random() < 0.5) {
-          minSpace = [x, y];
-        } else if (d < minD) {
-          minD = d;
-          minSpace = [x, y];
-        }
-      }),
-    );
-    if (!minSpace) {
-      continue;
+function update(): 'end' | 'continue' {
+  // batch = win.batch || batch
+  for (let i = 0; i < batch; i++) {
+    if (edge_cells.length == 0) {
+      console.log('no edge cells');
+      return 'end';
     }
-    const [x, y] = minSpace;
-    setPixel(x, y, rgb);
+    const color = nextColor();
+    let min_i = [];
+    let min_d = 256 ** 2 * 3;
+    let max_peer = 0;
+    // let min_peer = 3
+    for (let i = 0; i < edge_cells.length; i++) {
+      const cell = edge_cells[i];
+      if (cell.color) {
+        edge_cells.splice(i, 1);
+        i--;
+        continue;
+      }
+      let total_d = 0;
+      let peer_count = 0;
+      cell.peers.forEach(peer => {
+        if (!peer.cell.color) retu {rn;
+     }    const r = color[0] - peer.cell.color[0];
+        const g = color[1] - peer.cell.color[1];
+        const b = color[2] - peer.cell.color[2];
+        let d = r * r + g * g + b * b;
+        d *= peer.d ** 2;
+        total_d += d;
+        peer_count++;
+      });
+      if (peer_count == 0) {
+        console.error('no peer?');
+        return 'end';
+      }
+      const d = total_d / peer_count;
+      if (d < min_d && peer_count >= max_peer) {
+        max_peer = peer_count;
+        min_i = [i];
+        min_d = d;
+      } else if (d == min_d) {
+        min_i.push(i);
+      }
+    }
+    if (min_i.length == 0) {
+      console.error('min_i not found');
+      return 'end';
+    }
+    const i = min_i[floor(random() * min_i.length)];
+    const cell = edge_cells[i];
+    edge_cells.splice(i, 1);
+    cell.peers.forEach(peer => {
+      if (!peer.cell.color) {
+        edge_cells.push(peer.cell);
+      }
+    });
+    cell.color = color;
+    const offset = cell.offset;
+    imageData.data[offset + 0] = color[0];
+    imageData.data[offset + 1] = color[1];
+    imageData.data[offset + 2] = color[2];
   }
-  render();
 }
 
 function loop() {
   if (isStop) {
     return;
   }
-  update();
+  const result = update();
+  render();
+  if (result == 'end') {
+    console.log('end loop');
+    return;
+  }
   requestAnimationFrame(loop);
 }
 
 function start() {
-  spaces = [];
-  xy_rgb = new Array(w);
-  for (let x = 0; x < w; x++) {
-    xy_rgb[x] = new Array(h);
-  }
-  rgb_xy = new Array(256);
-  for (let r = 0; r < 256; r++) {
-    rgb_xy[r] = new Array(256);
-    for (let g = 0; g < 256; g++) {
-      rgb_xy[r][g] = new Array(256);
+  let offset = 0;
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      all_cells.push({ offset, peers: [] });
+      offset += 4;
+      for (;;) {
+        const r = floor(random() * 256);
+        const g = floor(random() * 256);
+        const b = floor(random() * 256);
+        const i = (r << 16) | (g << 8) | b;
+        if (!used_colors[i]) {
+          used_colors[i] = 1;
+          all_colors.push([r, g, b]);
+          break;
+        }
+      }
     }
   }
-  const color = nextColor();
+
+  const range = 3;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      const cell = all_cells[i];
+
+      for (let dy = -range; dy <= range; dy++) {
+        for (let dx = -range; dx <= range; dx++) {
+          if (dx == 0 && dy == 0) cont {inue;
+     }      const py = y + dy;
+          if (py < 0 || py >= h) cont {inue;
+     }      const px = x + dx;
+          if (px < 0 || px >= w) cont {inue;
+     }      const pi = py * w + px;
+          const p_cell = all_cells[pi];
+          const d = dx * dx + dy * dy;
+          cell.peers.push({ d, cell: p_cell });
+        }
+      }
+    }
+  }
+
   clear();
-  setPixel(halfW, halfH, color);
   isStop = false;
   isStopNext = false;
+
+  function init_place(i) {
+    const cell = all_cells[i];
+    const offset = cell.offset;
+    const color = nextColor();
+    cell.color = color;
+    cell.peers.forEach(peer => edge_cells.push(peer.cell));
+    imageData.data[offset + 0] = color[0];
+    imageData.data[offset + 1] = color[1];
+    imageData.data[offset + 2] = color[2];
+  }
+
+  // initial paint center cell
+  init_place(halfH * w + halfW);
+
+  // to fulfill min_peer
+
+  // initial paint center cell (right)
+  init_place(halfH * w + halfW + 1);
+
+  // initial paint center cell (left)
+  init_place(halfH * w + halfW - 1);
+
+  // initial paint center cell (up)
+  init_place(halfH * w + halfW - w);
+
+  // initial paint center cell (down)
+  init_place(halfH * w + halfW + w);
+
   loop();
 }
 
@@ -198,7 +255,15 @@ function stopNext() {
   isStopNext = true;
 }
 
-Object.assign(window, { start, resume, stop, stopNext });
+Object.assign(window, {
+  start,
+  resume,
+  stop,
+  stopNext,
+  batch,
+  imageData,
+  all_cells,
+});
 
 canvas.onclick = () => {
   if (isStop) {
@@ -208,4 +273,6 @@ canvas.onclick = () => {
   }
 };
 
+console.log('start');
 start();
+console.log('ready');
