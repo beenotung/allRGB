@@ -1,4 +1,4 @@
-document.title = 'allrgb'
+document.title = 'all rgb'
 
 const style: HTMLStyleElement = document.createElement('style')
 style.textContent = `
@@ -35,7 +35,7 @@ const A = 3
 type rgb = [number, number, number]
 type xy = [number, number]
 
-const { round, floor, random, min } = Math
+const { round, floor, ceil, random, min } = Math
 const halfH = round(h / 2)
 const halfW = round(w / 2)
 
@@ -57,6 +57,9 @@ let isStopNext = false
 let domStop = window.stop
 
 function stop() {
+  if (isStop) {
+    return
+  }
   isStop = true
   domStop()
 }
@@ -86,7 +89,7 @@ let colorDiff2 = colorDiff * 2
 
 function nextColor(): rgb {
   const color = all_colors[color_i]
-  color_i++
+  color_i = (color_i + 1) % all_colors.length
   return color
 }
 
@@ -97,62 +100,76 @@ function update(): 'end' | 'continue' {
       console.log('no edge cells')
       return 'end'
     }
-    const color = nextColor()
-    let min_i = []
-    let min_d = 256 ** 2 * 3
-    let max_peer = 0
-    // let min_peer = 3
+
+    let min_i = -1
+    let min_d = Number.MAX_VALUE
+    let min_color: rgb
+
     for (let i = 0; i < edge_cells.length; i++) {
-      const cell = edge_cells[i]
-      if (cell.color) {
+      if (edge_cells[i].color) {
         edge_cells.splice(i, 1)
         i--
-        continue
-      }
-      let total_d = 0
-      let peer_count = 0
-      cell.peers.forEach((peer) => {
-        if (!peer.cell.color) {
-          return
-        }
-        const r = color[0] - peer.cell.color[0]
-        const g = color[1] - peer.cell.color[1]
-        const b = color[2] - peer.cell.color[2]
-        let d = r * r + g * g + b * b
-        d *= peer.d ** 2
-        total_d += d
-        peer_count++
-      })
-      if (peer_count == 0) {
-        console.error('no peer?')
-        return 'end'
-      }
-      const d = total_d / peer_count
-      if (d < min_d && peer_count >= max_peer) {
-        max_peer = peer_count
-        min_i = [i]
-        min_d = d
-      } else if (d == min_d) {
-        min_i.push(i)
       }
     }
-    if (min_i.length == 0) {
+
+    const sample = 1000
+    const n_trial = 1
+    // const min_peer = 2
+    for (let i = 0; i < n_trial; i++) {
+      const color = nextColor()
+      let max_peer = 0
+      const step = ceil(edge_cells.length / sample)
+      for (let i = 0; i < edge_cells.length; i += step) {
+        const cell = edge_cells[i]
+        if (!cell) {
+          break
+        }
+        let total_d = 0
+        let peer_count = 0
+        cell.peers.forEach((peer) => {
+          if (!peer.cell.color) {
+            return
+          }
+          const r = color[0] - peer.cell.color[0]
+          const g = color[1] - peer.cell.color[1]
+          const b = color[2] - peer.cell.color[2]
+          let d = r * r + g * g + b * b
+          d *= peer.d ** 2
+          total_d += d
+          peer_count++
+        })
+        if (peer_count == 0) {
+          console.error('no peer?')
+          return 'end'
+        }
+        const d = total_d / peer_count
+        if (d < min_d && peer_count >= max_peer) {
+          // if (d < min_d && peer_count >= min_peer) {
+          // if (d < min_d) {
+          max_peer = peer_count
+          min_i = i
+          min_d = d
+          min_color = color
+        }
+      }
+    }
+
+    if (min_i == -1) {
       console.error('min_i not found')
       return 'end'
     }
-    const i = min_i[floor(random() * min_i.length)]
-    const cell = edge_cells[i]
-    edge_cells.splice(i, 1)
+    const cell = edge_cells[min_i]
+    edge_cells.splice(min_i, 1)
     cell.peers.forEach((peer) => {
       if (!peer.cell.color) {
         edge_cells.push(peer.cell)
       }
     })
-    cell.color = color
+    cell.color = min_color
     const offset = cell.offset
-    imageData.data[offset + 0] = color[0]
-    imageData.data[offset + 1] = color[1]
-    imageData.data[offset + 2] = color[2]
+    imageData.data[offset + 0] = min_color[0]
+    imageData.data[offset + 1] = min_color[1]
+    imageData.data[offset + 2] = min_color[2]
   }
 }
 
@@ -190,7 +207,7 @@ function start() {
     }
   }
 
-  const range = 3
+  const range = 1
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = y * w + x
