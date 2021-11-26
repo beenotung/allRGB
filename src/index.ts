@@ -1,4 +1,4 @@
-const { round, floor, ceil, random, min, max } = Math
+const { sqrt, round, floor, ceil, random, min, max } = Math
 
 const canvas: HTMLCanvasElement = document.querySelector('canvas#allrgb')
 const rect = canvas.getBoundingClientRect()
@@ -10,7 +10,7 @@ console.log({ w, h })
 const context = canvas.getContext('2d')
 const imageData = context.createImageData(w, h)
 
-const n_trial = 32
+const n_trial = 2048
 const range = 5
 const range2 = range * range
 const fps = 30
@@ -41,17 +41,26 @@ const halfH = round(h / 2)
 const halfW = round(w / 2)
 
 interface Cell {
+  index: number // index in all_cells
   offset: number
   color?: rgb
-  peers: { d: number; cell: Cell }[]
 }
 
-let all_cells: Cell[] = []
-let edge_cells: Cell[] = []
-let edge_cell_keys: (string | number)[] = []
-let new_colors: rgb[] = []
+interface DeltaPeer {
+  offset: number
+  d: number
+}
+
+const _1 = populateNewColors()
+
+const all_cells: Cell[] = _1.all_cells
+const cell_count = all_cells.length
+const edge_cells: Cell[] = []
+const edge_cell_keys: (string | number)[] = []
+const new_colors: rgb[] = _1.all_colors
 let color_i = 0
 let batch = 1
+const delta_peers: DeltaPeer[] = populatePeerDeltaOffsets(range)
 
 let isStop = true
 let isStopNext = false
@@ -116,8 +125,8 @@ function addEdgeCell(cell: Cell) {
 }
 
 function addPeerEdgeCell(cell: Cell) {
-  let i = all_cells.indexOf(cell)
-  let peers = [
+  const i = cell.index
+  const peers = [
     all_cells[i + 1],
     all_cells[i - 1],
     all_cells[i + w],
@@ -130,24 +139,42 @@ function addPeerEdgeCell(cell: Cell) {
   }
 }
 
-function nextEdgeCell() {
-  let n = edge_cell_keys.length
+function nextEdgeCell(): Cell | undefined {
+  const n = edge_cell_keys.length
   if (n == 0) {
     return
   }
   // let i = floor(random() * n)
   // let i = floor(n/2)
-  // let i = floor(n/3*2)
-  let i = n - 256
+  // let i = floor(n/10*9)
+  // let i = 0
+  // let i = floor(n / 3 * 2) - 128
+  let i = n - 128
   if (i < 0) {
     i = 0
   }
   // let i = n - 1
-  let key = edge_cell_keys[i]
-  let cell = edge_cells[key]
+  const key = edge_cell_keys[i]
+  const cell = edge_cells[key]
   delete edge_cells[key]
   edge_cell_keys.splice(i, 1)
   return cell
+}
+
+function forEachPeerColor(
+  index: number,
+  eachPeerColorFn: (color: rgb, d: number) => void,
+) {
+  delta_peers.forEach((delta_peer) => {
+    const peer_index = index + delta_peer.offset
+    if (peer_index < 0 || peer_index >= cell_count) {
+      return
+    }
+    const peer = all_cells[peer_index]
+    if (peer.color) {
+      eachPeerColorFn(peer.color, delta_peer.d)
+    }
+  })
 }
 
 function update(): 'end' | 'continue' {
@@ -166,15 +193,11 @@ function update(): 'end' | 'continue' {
       const color = nextColor()
       let total_d = 0
       let peer_count = 0
-      cell.peers.forEach((peer) => {
-        if (!peer.cell.color) {
-          return
-        }
-        const r = color[0] - peer.cell.color[0]
-        const g = color[1] - peer.cell.color[1]
-        const b = color[2] - peer.cell.color[2]
-        let d = r * r + g * g + b * b
-        d *= peer.d ** 2
+      forEachPeerColor(cell.index, (peer_color, peer_d) => {
+        const r = color[0] - peer_color[0]
+        const g = color[1] - peer_color[1]
+        const b = color[2] - peer_color[2]
+        const d = (r * r + g * g + b * b) * peer_d
         total_d += d
         peer_count++
       })
@@ -220,14 +243,38 @@ function loop() {
   requestAnimationFrame(loop)
 }
 
-function start() {
-  let offset = 0
+function populatePeerDeltaOffsets(range: number) {
+  const peer_delta_offsets: DeltaPeer[] = []
 
-  let all_colors: rgb[] = []
-  let used_colors: number[] = []
+  const dx_start = ceil(-range)
+  const dx_end = floor(range)
+
+  const dy_start = ceil(-range)
+  const dy_end = floor(range)
+
+  for (let dy = dy_start; dy <= dy_end; dy++) {
+    for (let dx = dx_start; dx <= dx_end; dx++) {
+      if (dx == 0 && dy == 0) {
+        continue
+      }
+      const d = sqrt(dx * dx + dy * dy)
+      const offset = dy * w + dx
+      peer_delta_offsets.push({ d, offset })
+    }
+  }
+  return peer_delta_offsets
+}
+
+function populateNewColors() {
+  const all_cells: Cell[] = []
+  const all_colors: rgb[] = []
+  const used_colors: number[] = []
+  let offset = 0
+  let index = 0
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      all_cells.push({ offset, peers: [] })
+      all_cells.push({ offset, index })
+      index++
       offset += 4
       for (;;) {
         const r = floor(random() * 256)
@@ -242,36 +289,10 @@ function start() {
       }
     }
   }
-  new_colors = all_colors
+  return { all_colors, all_cells }
+}
 
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const i = y * w + x
-      const cell = all_cells[i]
-
-      const px_start = max(0, ceil(x - range))
-      const py_start = max(0, ceil(y - range))
-      const px_end = min(w - 1, floor(x + range))
-      const py_end = min(h - 1, floor(y + range))
-      for (let py = py_start; py <= py_end; py++) {
-        for (let px = px_start; px <= px_end; px++) {
-          if (px == x && py == y) {
-            continue
-          }
-          const pi = py * w + px
-          const p_cell = all_cells[pi]
-          const dx = x - px
-          const dy = y - py
-          const d2 = dx * dx + dy * dy
-          if (d2 > range2) {
-            continue
-          }
-          cell.peers.push({ d: d2, cell: p_cell })
-        }
-      }
-    }
-  }
-
+function start() {
   clear()
   isStop = false
   isStopNext = false
@@ -328,6 +349,7 @@ Object.assign(window, {
   edge_cell_keys,
   imageData,
   all_cells,
+  delta_peers,
 })
 
 canvas.onclick = () => {
