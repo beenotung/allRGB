@@ -149,11 +149,21 @@ function nextEdgeCell(): Cell | undefined {
   // let i = floor(n/10*9)
   // let i = 0
   // let i = floor(n / 3 * 2) - 128
-  let i = n - 128
+  // let i = n - 1
+
+  /* for chip-shape core */
+  // let i = n - 125
+  // if (i < 0) {
+  //   i = 0
+  // }
+
+  /* for man-on-chair pattern */
+  let i = n - 64
   if (i < 0) {
     i = 0
   }
-  // let i = n - 1
+  i = (i + 32) % n
+
   const key = edge_cell_keys[i]
   const cell = edge_cells[key]
   delete edge_cells[key]
