@@ -13,13 +13,14 @@
       #allrgb {
         width: 100vw;
         height: 100vh;
+        image-rendering: pixelated;
       }
     </style>
   </head>
 
   <body>
     <canvas id="allrgb"></canvas>
-    <script src="index.js"></script>
+    <script type="module" src="index.js"></script>
     <noscript id="noscript">javascript is required</noscript>
     <script>
       document.getElementById('noscript').remove()
