@@ -1,19 +1,37 @@
+import {
+  new_oklab,
+  new_rgb,
+  rgb,
+  oklab,
+  rgb_to_oklab,
+} from 'oklab.ts/dist/oklab';
+const { round } = Math;
+
 document.title = 'allrgb';
 
 const style: HTMLStyleElement = document.createElement('style');
-style.textContent = `
+style.textContent = /* css */ `
 body {
   padding: 0;
   margin: 0;
   overflow: hidden;
 }
+canvas {
+  width: 100vw;
+  height: 100dvh;
+  image-rendering: pixelated;
+}
 `;
 document.body.appendChild(style);
 
+let scale = 2;
+
 const canvas: HTMLCanvasElement = document.createElement('canvas');
 document.body.appendChild(canvas);
-const w = (canvas.width = 400 * 0 || screen.availWidth);
-const h = (canvas.height = 400 * 0 || screen.availHeight);
+const w = round(screen.availWidth / scale);
+const h = round(screen.availHeight / scale);
+canvas.width = w;
+canvas.height = h;
 const context = canvas.getContext('2d');
 const imageData = context.createImageData(w, h);
 
@@ -21,79 +39,71 @@ function render() {
   context.putImageData(imageData, 0, 0);
 }
 
-function clear() {
-  for (let i = 0; i < imageData.data.length; i++) {
-    imageData.data[i] = i % 4 === 3 ? 255 : 0;
-  }
-}
-
 const R = 0;
 const G = 1;
 const B = 2;
 const A = 3;
 
-type rgb = [number, number, number];
-type xy = [number, number];
-
-const { round } = Math;
-const halfH = round(h / 2);
-const halfW = round(w / 2);
-/**
- * x -> y -> rgb
- * */
-let xy_rgb: rgb[][];
-/**
- * r -> g -> b -> xy
- * */
-let rgb_xy: xy[][][];
-/**
- * x -> y -> rgb
- * opposite to xy_rgb, that store occupied cells, this store unoccupied cells
- * */
-let spaces: rgb[][];
-
-function setPixel(x: number, y: number, color: rgb) {
-  const [r, g, b] = color;
-  if (xy_rgb[x]) {
-    xy_rgb[x][y] = color;
-  } else {
-    const ys = (xy_rgb[x] = []);
-    ys[y] = color;
+function clear() {
+  for (let i = 0; i < imageData.data.length; i += 4) {
+    imageData.data[i + R] = 0;
+    imageData.data[i + G] = 0;
+    imageData.data[i + B] = 0;
+    imageData.data[i + A] = 255;
   }
-  rgb_xy[r][g][b] = [x, y];
-  if (spaces[x]) {
-    delete spaces[x][y];
-  }
-  // find nearby spaces
-  for (const xy of [
+}
+
+type Color = [rgb, oklab];
+
+/**
+ * x -> y -> peers color
+ * unoccupied cells
+ * */
+let spaces: Color[][][];
+
+/**
+ * x -> y -> used or not
+ */
+let used_spaces: number[][] = [];
+
+function setPixel(x: number, y: number) {
+  let color: Color = [{ ...rgb }, { ...oklab }];
+
+  // dispatch current color to nearby spaces
+  let peers = [
     [x, y + 1],
     [x, y - 1],
     [x + 1, y],
     [x - 1, y],
-  ]) {
-    const [x, y] = xy;
-    if (x < 0 || x > w || y < 0 || y > h) {
-      continue;
-    }
-    if (xy_rgb[x] && xy_rgb[x][y]) {
-      continue;
-    }
+    [x + 1, y + 1],
+    [x + 1, y - 1],
+    [x - 1, y + 1],
+    [x - 1, y - 1],
+  ];
+  for (let xy of peers) {
+    let [x, y] = xy;
+    if (x < 0 || y < 0) continue;
+    if (x == w || y == h) continue;
+    if (used_spaces[x][y]) continue;
     if (!spaces[x]) {
-      const ys = (spaces[x] = []);
-      ys[y] = [color];
-    } else {
-      spaces[x][y] = color;
+      spaces[x] = [];
     }
+    if (!spaces[x][y]) {
+      spaces[x][y] = [];
+    }
+    spaces[x][y].push(color);
   }
+  delete spaces[x][y];
+  used_spaces[x][y] = 1;
+
   const offset = (x + y * w) * 4;
-  imageData.data[offset + R] = r;
-  imageData.data[offset + G] = g;
-  imageData.data[offset + B] = b;
+  imageData.data[offset + R] = rgb.r;
+  imageData.data[offset + G] = rgb.g;
+  imageData.data[offset + B] = rgb.b;
   // imageData.data[offset + A] = 255;
 }
 
-let isStop = true;
-let isStopNext = false;
+let isStop = false;
 let domStop = window.stop;
 
 function stop() {
@@ -103,65 +113,87 @@ function stop() {
   }
 }
 
-/**
- * @return 0..n
- * */
-function genValue(n: number): number {
-  return Math.round(Math.random() * n);
+function resume() {
+  isStop = false;
+  loop();
 }
 
-function rgbDiff(x: rgb, y: rgb): number {
-  const r = x[0] - y[0];
-  const g = x[1] - y[1];
-  const b = x[2] - y[2];
-  return r * r + g * g + b * b;
-}
+// r -> g -> b -> used
+let used_color: number[][][];
 
-let lastR = genValue(255);
-let lastG = genValue(255);
-let lastB = genValue(255);
+let rgb = new_rgb();
+let oklab = new_oklab();
 
-let colorDiff = 16;
-let colorDiff2 = colorDiff * 2;
-
-function nextColor(): rgb {
+function nextColor(): void {
   for (;;) {
-    let r = lastR + genValue(colorDiff2) - colorDiff;
-    let g = lastG + genValue(colorDiff2) - colorDiff;
-    let b = lastB + genValue(colorDiff2) - colorDiff;
-    r = (r + 256) % 256;
-    g = (g + 256) % 256;
-    b = (b + 256) % 256;
-    if (!rgb_xy[r][g][b]) {
-      lastR = r;
-      lastG = g;
-      lastB = b;
-      return [r, g, b];
+    let r = Math.floor(Math.random() * 256);
+    let g = Math.floor(Math.random() * 256);
+    let b = Math.floor(Math.random() * 256);
+    if (used_color[r][g][b]) {
+      continue;
     }
+    used_color[r][g][b] = 1;
+    rgb.r = r;
+    rgb.g = g;
+    rgb.b = b;
+    rgb_to_oklab(rgb, oklab);
+    return;
   }
 }
 
+let batchSize = 64;
 function update() {
-  for (let i = 0; i < 64; i++) {
-    const rgb = nextColor();
-    let minD = Number.MAX_SAFE_INTEGER;
-    let minSpace: xy;
+  let start = Date.now();
+  for (let i = 0; i < batchSize; i++) {
+    nextColor();
+    let L = oklab.L;
+    let a = oklab.a;
+    let b = oklab.b;
+    // let r = rgb.r
+    // let g = rgb.g
+    // let b = rgb.b
+    let min_dist = Number.MAX_SAFE_INTEGER;
+    let min_x: number;
+    let min_y: number;
     spaces.forEach((ys, x) =>
-      ys.forEach((c, y) => {
-        const d = rgbDiff(c, rgb);
-        if (d === minD && Math.random() < 0.5) {
-          minSpace = [x, y];
-        } else if (d < minD) {
-          minD = d;
-          minSpace = [x, y];
+      ys.forEach((colors, y) => {
+        let maxDist = 0;
+        let weight = colors.length ** 3;
+        colors.forEach((color) => {
+          let [rgb, oklab] = color;
+          let dist_L = L - oklab.L;
+          let dist_a = a - oklab.a;
+          let dist_b = b - oklab.b;
+          let dist = dist_L * dist_L + dist_a * dist_a + dist_b * dist_b;
+          // let dist_r = r - rgb.r
+          // let dist_g = g - rgb.g
+          // let dist_b = b - rgb.b
+          // let dist = dist_r * dist_r + dist_g * dist_g + dist_b * dist_b
+          if (dist > maxDist) {
+            maxDist = dist;
+          }
+        });
+        let dist = maxDist / weight;
+        if (dist < min_dist || (dist == min_dist && Math.random() < 3 / 8)) {
+          min_dist = dist;
+          min_x = x;
+          min_y = y;
         }
       }),
     );
-    if (!minSpace) {
-      continue;
+    if (min_x == undefined) {
+      break;
     }
-    const [x, y] = minSpace;
-    setPixel(x, y, rgb);
+    setPixel(min_x, min_y);
+  }
+  let end = Date.now();
+  let passed = end - start;
+  let targetFPS = 10;
+  let targetInterval = 1000 / targetFPS;
+  if (passed > targetInterval && batchSize > 1) {
+    batchSize--;
+  } else if (passed < targetInterval) {
+    batchSize++;
   }
   render();
 }
@@ -175,37 +207,30 @@ function loop() {
 }
 
 function start() {
-  spaces = [];
-  xy_rgb = new Array(w);
-  for (let x = 0; x < w; x++) {
-    xy_rgb[x] = new Array(h);
-  }
-  rgb_xy = new Array(256);
+  clear();
+
+  used_color = new Array(256);
   for (let r = 0; r < 256; r++) {
-    rgb_xy[r] = new Array(256);
+    used_color[r] = new Array(256);
     for (let g = 0; g < 256; g++) {
-      rgb_xy[r][g] = new Array(256);
+      used_color[r][g] = new Array(256).fill(0);
     }
   }
-  const color = nextColor();
-  clear();
-  setPixel(halfW, halfH, color);
-  isStop = false;
-  isStopNext = false;
-  loop();
+
+  used_spaces = new Array(w);
+  for (let x = 0; x < w; x++) {
+    used_spaces[x] = new Array(h).fill(0);
+  }
+
+  spaces = [];
+
+  nextColor();
+  setPixel(round(w / 2), round(h / 2));
+
+  resume();
 }
 
-function resume() {
-  isStop = false;
-  isStopNext = false;
-  loop();
-}
-
-function stopNext() {
-  isStopNext = true;
-}
-
-Object.assign(window, { start, resume, stop, stopNext });
+Object.assign(window, { start, resume, stop });
 
 canvas.onclick = () => {
   if (isStop) {

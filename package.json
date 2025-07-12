@@ -37,5 +37,8 @@
     "onlyBuiltDependencies": [
       "esbuild"
     ]
+  },
+  "dependencies": {
+    "oklab.ts": "^2.2.7"
   }
 }
