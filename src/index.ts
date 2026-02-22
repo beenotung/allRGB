@@ -65,7 +65,12 @@ function setPixel(x: number, y: number, color: rgb) {
     delete spaces[x][y];
   }
   // find nearby spaces
-  for (const xy of [[x, y + 1], [x, y - 1], [x + 1, y], [x - 1, y]]) {
+  for (const xy of [
+    [x, y + 1],
+    [x, y - 1],
+    [x + 1, y],
+    [x - 1, y],
+  ]) {
     const [x, y] = xy;
     if (x < 0 || x > w || y < 0 || y > h) {
       continue;
